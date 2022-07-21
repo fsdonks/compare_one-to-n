@@ -6,20 +6,18 @@ Created on Tue Jul 19 16:28:13 2022
 @author: craig
 """
 import pandas as pd
-ns = {'variable' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
-      '20' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
-      '25' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx"}
-supply_demand=pd.read_excel("/home/craig/workspace/compare_one-to-n/SupplyDemand.xlsx", "SupplyDemand")
+import functools as ft
 
-def load_frames(run_dict):
+def load_frames(run_dict, supp_demand_path, interests_path):
+    supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
     new_dict= {}
     for run in run_dict.keys():       
         df= pd.read_excel(run_dict[run], "combined")
         df[run]=df['STR'].cumsum()
         if len(new_dict)==0:
             df_small=df[["SRC", "STR"]]
-            interests = pd.read_excel("/home/craig/workspace/compare_one-to-n/interesting_srcs.xlsx")
-            df_small=df_small.merge(interests, on='SRC', how='left')
+            interests = pd.read_excel(interests_path)
+            df_small=df_small.merge(interests, on='SRC', how='right')
             df_small=df_small.merge(supply_demand[['SRC', 'RA', 'ARNG', 'USAR']], on='SRC', how='left')
             if run=='variable':
                 df_small=df_small.merge(supply_demand[['SRC', 'RCAvailable']], 
@@ -38,10 +36,14 @@ def load_frames(run_dict):
         new_dict[run]= df_small.drop_duplicates('SRC', ignore_index=True)
     return new_dict
 
-f = load_frames(ns)
-
-import functools as ft
-df_final = ft.reduce(lambda left, right: pd.merge(left, right, on='SRC'), f.values())
-df_final.to_excel('/home/craig/workspace/compare_one-to-n/output.xlsx')
+def summary_table(run_dict, 
+                  supp_demand_path, 
+                  interests_path, 
+                  output_path):
+    f = load_frames(run_dict, 
+                  supp_demand_path, 
+                  interests_path)
+    df_final = ft.reduce(lambda left, right: pd.merge(left, right, on='SRC'), f.values())
+    df_final.to_excel(output_path)
 
 #scatterplot
