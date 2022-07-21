@@ -13,25 +13,27 @@ def load_frames(run_dict, supp_demand_path, interests_path):
     new_dict= {}
     for run in run_dict.keys():       
         df= pd.read_excel(run_dict[run], "combined")
+        #add running total
         df[run]=df['STR'].cumsum()
         if len(new_dict)==0:
-            df_small=df[["SRC", "STR"]]
+            df_small=df[["SRC", "STR", run]]
             interests = pd.read_excel(interests_path)
-            df_small=df_small.merge(interests, on='SRC', how='right')
-            df_small=df_small.merge(supply_demand[['SRC', 'RA', 'ARNG', 'USAR']], on='SRC', how='left')
+            #make sure interests doesn't have duplicates
+            #and filter on interests
+            df_small=df_small.merge(
+                interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
+            df_small=df_small.merge(supply_demand[['SRC', 'RA', 'ARNG', 'USAR']], on='SRC')
             if run=='variable':
                 df_small=df_small.merge(supply_demand[['SRC', 'RCAvailable']], 
-                            on='SRC', how='left')
+                            on='SRC')
                 df_small.rename(inplace=True, 
                   columns={'RCAvailable' : run + '_RC Units Available'})
         else:
-            df_small=df[["SRC"]]
-            df_small=df_small.merge(supply_demand[['SRC', 'ARNG', 'USAR']], on='SRC', how='left')
+            df_small=df.merge(supply_demand[['SRC', 'ARNG', 'USAR']], on='SRC')
             df_small['RC']=df_small['ARNG']+df_small['USAR']
             df_small[run + '_RC Units Available']= int(run)*df_small['RC']//100
             df_small.astype({run + '_RC Units Available': 'Int64'}, copy=False)
-            df_small=df_small[["SRC", run + '_RC Units Available']]
-        df_small=df_small.merge(df[['SRC', run]].copy(), on='SRC', how='left')
+            df_small=df_small[["SRC", run + '_RC Units Available', run]]
         df_small.rename(inplace=True, columns={run : run + '_1-n position'})
         new_dict[run]= df_small.drop_duplicates('SRC', ignore_index=True)
     return new_dict
