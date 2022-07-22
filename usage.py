@@ -17,6 +17,13 @@ run_dict = {'variable' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
       '25' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx"}
 output_path='/home/craig/workspace/compare_one-to-n/output.xlsx'
 
+
+
+core.compute_cuts(run_dict, 
+                  supp_demand_path, 
+                  interests_path, 
+                  40000)
+
 core.summary_table(run_dict, 
                   supp_demand_path, 
                   interests_path, 

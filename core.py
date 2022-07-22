@@ -48,4 +48,40 @@ def summary_table(run_dict,
     df_final = ft.reduce(lambda left, right: pd.merge(left, right, on='SRC'), f.values())
     df_final.to_excel(output_path)
 
+#Table of cuts by run
+#same dict as input
+#without src info joins for now
+#do cumsum
+def compute_cuts(run_dict, supp_demand_path, interests_path, cut_level):
+    supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
+    new_dict= {}
+    for run in run_dict.keys():       
+        df= pd.read_excel(run_dict[run], "combined")
+        #add running total
+        df[run]=df['STR'].cumsum()
+        curr_cuts=0
+        cut_records=pd.DataFrame()
+        num_skipped=0
+        for idx,row in df.iterrows():
+            if num_skipped==5:
+                break
+            new_str=row['STR']
+            if curr_cuts+new_str - cut_level > 4000:
+                num_skipped+=1
+                continue
+            cut_records = cut_records.append(row)
+            curr_cuts+=new_str
+            if curr_cuts>cut_level:
+                break
+        #now have cut_records
+        result=cut_records.groupby('SRC').count()
+        result=result[[run]]
+        result.reset_index(inplace=True)
+        new_dict[run]=result
+    df_final = ft.reduce(lambda left, right: pd.merge(left, right, on='SRC'), new_dict.values())
+    return df_final
+#take cuts here in python (ask dallas if there's a standard for that.)
+#merge right with their data like above
+#them concat each of the values
+
 #scatterplot
