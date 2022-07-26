@@ -20,6 +20,8 @@ def load_frames(run_dict, supp_demand_path, interests_path):
             interests = pd.read_excel(interests_path)
             #make sure interests doesn't have duplicates
             #and filter on interests
+            #eventually, change merge so that order is interest, supply demand,
+            #and then df_small instead of starting with df_small now.
             df_small=df_small.merge(
                 interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
             df_small=df_small.merge(supply_demand[['SRC', 'RA', 'ARNG', 'USAR']], on='SRC')
@@ -53,12 +55,11 @@ def summary_table(run_dict,
 #without src info joins for now
 #do cumsum
 def compute_cuts(run_dict, supp_demand_path, interests_path, cut_level):
-    supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
     new_dict= {}
     for run in run_dict.keys():       
         df= pd.read_excel(run_dict[run], "combined")
         #add running total
-        df[run]=df['STR'].cumsum()
+        df["cumsum"]=df['STR'].cumsum()
         curr_cuts=0
         cut_records=pd.DataFrame()
         num_skipped=0
@@ -74,14 +75,49 @@ def compute_cuts(run_dict, supp_demand_path, interests_path, cut_level):
             if curr_cuts>cut_level:
                 break
         #now have cut_records
-        result=cut_records.groupby('SRC').count()
-        result=result[[run]]
-        result.reset_index(inplace=True)
+        #result=cut_records.groupby('SRC').count()
+        result=cut_records
+        result['run']=run
+        result['cut_level']=cut_level
         new_dict[run]=result
-    df_final = ft.reduce(lambda left, right: pd.merge(left, right, on='SRC'), new_dict.values())
+    df_final = ft.reduce(lambda left, right: pd.concat([left, right]), new_dict.values())
     return df_final
-#take cuts here in python (ask dallas if there's a standard for that.)
-#merge right with their data like above
-#them concat each of the values
+
+def spit_cuts(run_dict, supp_demand_path, interests_path, cut_levels, 
+              output_path):
+    all_cuts = []
+    for c in cut_levels:
+        all_cuts.append(compute_cuts(run_dict, 
+                                     supp_demand_path, 
+                                     interests_path, c))
+    df_final = ft.reduce(lambda left, right: pd.concat([left, right]), 
+                         all_cuts)
+    supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
+    table=pd.pivot_table(df_final, values='TITLE', index=['SRC'],
+                    columns=['run', 'cut_level'], aggfunc='count')
+    interests = pd.read_excel(interests_path)
+            #make sure interests doesn't have duplicates
+            #and filter on interests
+    supply_demand=supply_demand.merge(
+    interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
+    supply_demand=supply_demand[['SRC', 'RA', 'ARNG', 'USAR', 'RCAvailable']]
+    #In order to merge with the pivot table, we need to set index and change 
+    #to a MultiIndex
+    supply_demand.set_index('SRC', inplace=True)
+    supply_demand.columns = pd.MultiIndex.from_product([[' '], supply_demand.columns])
+    table=table.merge(supply_demand, left_index=True, right_index=True)
+    runs=set([x for x in table.columns.get_level_values(0) if x!=' ' and x!='variable'])
+    table[' ', 'RC']=table[' ', 'ARNG']+table[' ', 'USAR']
+    for run in runs:
+        rint=int(run)
+        table[run, 'RC Units Available']= rint*table[' ', 'RC']//100
+        table.astype({(run, 'RC Units Available'): 'Int64'}, copy=False)
+    #In order to rename multiindex columns with tupes, we set the column
+    #values first.
+    table.columns = table.columns.values
+    table.columns = pd.MultiIndex.from_tuples(table.rename(columns={(' ', 'RCAvailable'): ('variable', 'RC Units Available')}))
+    table = table.sort_index(axis=1)
+    table.to_excel(output_path)
+    return table
 
 #scatterplot

@@ -15,16 +15,17 @@ interests_path = "/home/craig/workspace/compare_one-to-n/interesting_srcs.xlsx"
 run_dict = {'variable' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
       '20' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
       '25' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx"}
-output_path='/home/craig/workspace/compare_one-to-n/output.xlsx'
+first_cuts_output='/home/craig/workspace/compare_one-to-n/first_cuts.xlsx'
+total_cuts_table='/home/craig/workspace/compare_one-to-n/total_cuts.xlsx'
 
 
-
-core.compute_cuts(run_dict, 
+core.spit_cuts(run_dict, 
                   supp_demand_path, 
                   interests_path, 
-                  40000)
+                  [40000, 20000], total_cuts_table)
+
 
 core.summary_table(run_dict, 
                   supp_demand_path, 
                   interests_path, 
-                  output_path)
+                  first_cuts_output)
