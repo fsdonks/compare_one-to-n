@@ -5,9 +5,11 @@ Created on Tue Jul 19 16:28:13 2022
 
 @author: craig
 """
+
 import pandas as pd
 import functools as ft
 
+variable_name = 'TAA Baseline'
 def load_frames(run_dict, supp_demand_path, interests_path):
     supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
     new_dict= {}
@@ -25,7 +27,7 @@ def load_frames(run_dict, supp_demand_path, interests_path):
             df_small=df_small.merge(
                 interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
             df_small=df_small.merge(supply_demand[['SRC', 'RA', 'ARNG', 'USAR']], on='SRC')
-            if run=='variable':
+            if run==variable_name:
                 df_small=df_small.merge(supply_demand[['SRC', 'RCAvailable']], 
                             on='SRC')
                 df_small.rename(inplace=True, 
@@ -83,6 +85,26 @@ def compute_cuts(run_dict, supp_demand_path, interests_path, cut_level):
     df_final = ft.reduce(lambda left, right: pd.concat([left, right]), new_dict.values())
     return df_final
 
+sort_order_upper = list(reversed([' ',
+              variable_name,
+              ]))
+
+sort_order_lower = sort_order_upper+['Branch',
+                    'SRC',
+                    'Unit',
+                    'RA',
+                    'ARNG',
+                    'USAR',
+                    'Baseline RC Availability'
+              ]
+
+
+def sorter(sort_order, x):
+    enum=enumerate(sort_order)
+    positions=dict((j,i) for i,j in enum)
+    res=[positions[y]+100 if y in positions else int(y) for y in x ]
+    return res
+
 def spit_cuts(run_dict, supp_demand_path, interests_path, cut_levels, 
               output_path):
     all_cuts = []
@@ -100,23 +122,39 @@ def spit_cuts(run_dict, supp_demand_path, interests_path, cut_levels,
             #and filter on interests
     supply_demand=supply_demand.merge(
     interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
-    supply_demand=supply_demand[['SRC', 'RA', 'ARNG', 'USAR', 'RCAvailable']]
+    supply_demand=supply_demand[['SRC', 
+                                 'RA', 
+                                 'ARNG', 
+                                 'USAR', 
+                                 'RCAvailable', 'TITLE', 'Branch']]
     #In order to merge with the pivot table, we need to set index and change 
     #to a MultiIndex
     supply_demand.set_index('SRC', inplace=True)
     supply_demand.columns = pd.MultiIndex.from_product([[' '], supply_demand.columns])
     table=table.merge(supply_demand, left_index=True, right_index=True)
-    runs=set([x for x in table.columns.get_level_values(0) if x!=' ' and x!='variable'])
+    
+    # runs=set([x for x in table.columns.get_level_values(0) if x!=' ' and x!=variable_name])
     table[' ', 'RC']=table[' ', 'ARNG']+table[' ', 'USAR']
-    for run in runs:
-        rint=int(run)
-        table[run, 'RC Units Available']= rint*table[' ', 'RC']//100
-        table.astype({(run, 'RC Units Available'): 'Int64'}, copy=False)
+    # for run in runs:
+    #     rint=int(run)
+    #     table[run, 'RC Units Available']= rint*table[' ', 'RC']//100
+    #     table.astype({(run, 'RC Units Available'): 'Int64'}, copy=False)
+    
+    table[' ', 'avails']=table[' ', 'RCAvailable']/table[' ', 'RC']*100
+    table[' ', 'avails'] = table[' ', 'avails'].round(0)
+    table[' ', 'avails']=table[' ', 'avails'].astype(int)
+    table[' ', 'avails']=table[' ', 'avails'].astype(str)
+    table[' ', 'avails']=table[' ', 'avails']+'%'
     #In order to rename multiindex columns with tupes, we set the column
     #values first.
     table.columns = table.columns.values
-    table.columns = pd.MultiIndex.from_tuples(table.rename(columns={(' ', 'RCAvailable'): ('variable', 'RC Units Available')}))
-    table = table.sort_index(axis=1)
+    table.columns = pd.MultiIndex.from_tuples(table.rename(columns={(' ', 'avails'): (variable_name, 'Baseline RC Availability'),
+                                                                    (' ', 'TITLE') : (' ', 'Unit')}))
+    table.drop(columns=[(' ', 'RCAvailable'), (' ', 'RC')], inplace=True)
+    table.reset_index(inplace=True, col_level=1)
+    table.rename(axis=1, level=0, mapper={'':' '},inplace=True)
+    table = table.sort_index(axis=1, key=ft.partial(sorter, sort_order_lower), ascending=[False, True])
+    table = table.sort_values((' ', 'SRC'))
     table.to_excel(output_path)
     return table
 

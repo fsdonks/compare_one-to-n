@@ -12,7 +12,7 @@ import core as core
 
 supp_demand_path = "/home/craig/workspace/compare_one-to-n/SupplyDemand.xlsx"
 interests_path = "/home/craig/workspace/compare_one-to-n/interesting_srcs.xlsx"
-run_dict = {'variable' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
+run_dict = {core.variable_name : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
       '20' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx",
       '25' : "/home/craig/workspace/compare_one-to-n/1-n.xlsx"}
 first_cuts_output='/home/craig/workspace/compare_one-to-n/first_cuts.xlsx'
