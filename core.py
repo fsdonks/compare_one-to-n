@@ -10,7 +10,7 @@ import pandas as pd
 import functools as ft
 
 variable_name = 'TAA Baseline'
-def load_frames(run_dict, supp_demand_path, interests_path):
+def load_frames(run_dict, supp_demand_path, interests_path=None):
     supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
     new_dict= {}
     for run in run_dict.keys():       
@@ -19,13 +19,14 @@ def load_frames(run_dict, supp_demand_path, interests_path):
         df[run]=df['STR'].cumsum()
         if len(new_dict)==0:
             df_small=df[["SRC", "STR", run]]
-            interests = pd.read_excel(interests_path)
-            #make sure interests doesn't have duplicates
-            #and filter on interests
-            #eventually, change merge so that order is interest, supply demand,
-            #and then df_small instead of starting with df_small now.
-            df_small=df_small.merge(
-                interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
+            if interests_path is not None:
+                interests = pd.read_excel(interests_path)
+                #make sure interests doesn't have duplicates
+                #and filter on interests
+                #eventually, change merge so that order is interest, supply demand,
+                #and then df_small instead of starting with df_small now.
+                df_small=df_small.merge(
+                    interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
             df_small=df_small.merge(supply_demand[['SRC', 'RA', 'ARNG', 'USAR']], on='SRC')
             if run==variable_name:
                 df_small=df_small.merge(supply_demand[['SRC', 'RCAvailable']], 
@@ -44,8 +45,8 @@ def load_frames(run_dict, supp_demand_path, interests_path):
 
 def summary_table(run_dict, 
                   supp_demand_path, 
-                  interests_path, 
-                  output_path):
+                  output_path,
+                  interests_path=None):
     f = load_frames(run_dict, 
                   supp_demand_path, 
                   interests_path)
@@ -89,7 +90,7 @@ sort_order_upper = list(reversed([' ',
               variable_name,
               ]))
 
-sort_order_lower = sort_order_upper+['Branch',
+sort_order_lower = sort_order_upper+['SRC2',
                     'SRC',
                     'Unit',
                     'RA',
@@ -105,8 +106,8 @@ def sorter(sort_order, x):
     res=[positions[y]+100 if y in positions else int(y) for y in x ]
     return res
 
-def spit_cuts(run_dict, supp_demand_path, interests_path, cut_levels, 
-              output_path):
+def spit_cuts(run_dict, supp_demand_path, cut_levels, 
+              output_path, interests_path=None):
     all_cuts = []
     for c in cut_levels:
         all_cuts.append(compute_cuts(run_dict, 
@@ -117,16 +118,21 @@ def spit_cuts(run_dict, supp_demand_path, interests_path, cut_levels,
     supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
     table=pd.pivot_table(df_final, values='TITLE', index=['SRC'],
                     columns=['run', 'cut_level'], aggfunc='count')
-    interests = pd.read_excel(interests_path)
-            #make sure interests doesn't have duplicates
-            #and filter on interests
-    supply_demand=supply_demand.merge(
-    interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
-    supply_demand=supply_demand[['SRC', 
+    if interests_path is not None:
+        interests = pd.read_excel(interests_path)
+                #make sure interests doesn't have duplicates
+                #and filter on interests
+        supply_demand=supply_demand.merge(
+        interests.drop_duplicates('SRC', ignore_index=True), on='SRC')
+    supply_demand['SRC2']=supply_demand['SRC'].str[:2]
+    #if want to add a branch filter
+    #branches=['02', '99']
+    #supply_demand=supply_demand[supply_demand['SRC2'].isin(branches)]
+    supply_demand=supply_demand[['SRC2', 'SRC', 
                                  'RA', 
                                  'ARNG', 
                                  'USAR', 
-                                 'RCAvailable', 'TITLE', 'Branch']]
+                                 'RCAvailable', 'UNTDS']]
     #In order to merge with the pivot table, we need to set index and change 
     #to a MultiIndex
     supply_demand.set_index('SRC', inplace=True)
@@ -141,15 +147,16 @@ def spit_cuts(run_dict, supp_demand_path, interests_path, cut_levels,
     #     table.astype({(run, 'RC Units Available'): 'Int64'}, copy=False)
     
     table[' ', 'avails']=table[' ', 'RCAvailable']/table[' ', 'RC']*100
+    #if there was any division by 0
+    table[' ', 'avails']=table[' ', 'avails'].fillna(0)
     table[' ', 'avails'] = table[' ', 'avails'].round(0)
-    table[' ', 'avails']=table[' ', 'avails'].astype(int)
     table[' ', 'avails']=table[' ', 'avails'].astype(str)
     table[' ', 'avails']=table[' ', 'avails']+'%'
     #In order to rename multiindex columns with tupes, we set the column
     #values first.
     table.columns = table.columns.values
     table.columns = pd.MultiIndex.from_tuples(table.rename(columns={(' ', 'avails'): (variable_name, 'Baseline RC Availability'),
-                                                                    (' ', 'TITLE') : (' ', 'Unit')}))
+                                                                    (' ', 'UNTDS') : (' ', 'Unit')}))
     table.drop(columns=[(' ', 'RCAvailable'), (' ', 'RC')], inplace=True)
     table.reset_index(inplace=True, col_level=1)
     table.rename(axis=1, level=0, mapper={'':' '},inplace=True)

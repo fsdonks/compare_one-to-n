@@ -20,12 +20,10 @@ total_cuts_table='/home/craig/workspace/compare_one-to-n/total_cuts.xlsx'
 
 
 core.spit_cuts(run_dict, 
-                  supp_demand_path, 
-                  interests_path, 
-                  [40000, 20000], total_cuts_table)
+                  supp_demand_path,                  
+                  [40000, 20000], total_cuts_table, interests_path,)
 
 
 core.summary_table(run_dict, 
-                  supp_demand_path, 
-                  interests_path, 
-                  first_cuts_output)
+                  supp_demand_path,  
+                  first_cuts_output, interests_path,)
