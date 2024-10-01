@@ -8,9 +8,13 @@ Created on Tue Jul 19 16:28:13 2022
 
 import pandas as pd
 import functools as ft
+import math
+import numpy as np
 
-variable_name = 'TAA Baseline'
-def load_frames(run_dict, supp_demand_path, interests_path=None):
+variable_name = 'Variable RC'
+default_rc_availability=50
+
+def load_frames(run_dict, supp_demand_path, rc_avail, interests_path=None):
     supply_demand=pd.read_excel(supp_demand_path, "SupplyDemand")
     new_dict= {}
     for run in run_dict.keys():       
@@ -31,12 +35,23 @@ def load_frames(run_dict, supp_demand_path, interests_path=None):
             if run==variable_name:
                 df_small=df_small.merge(supply_demand[['SRC', 'RCAvailable']], 
                             on='SRC')
+                df_small['RC']=df_small['ARNG']+df_small['USAR']
+                conditions = [df_small['RC']==0, df_small['RCAvailable']==0]
+                choices=[0, df_small['RC'].apply(lambda 
+                                                 x: math.floor(x*default_rc_availability/100))]
+                df_small['RCAvailable'] = np.select(conditions, choices, 
+                                                    default=df_small['RCAvailable'])    
                 df_small.rename(inplace=True, 
                   columns={'RCAvailable' : run + '_RC Units Available'})
         else:
             df_small=df.merge(supply_demand[['SRC', 'ARNG', 'USAR']], on='SRC')
             df_small['RC']=df_small['ARNG']+df_small['USAR']
-            df_small[run + '_RC Units Available']= int(run)*df_small['RC']//100
+            if(rc_avail):
+                run_int=int(run)
+            else:
+                run_int=default_rc_availability
+            df_small[run + '_RC Units Available'] = np.where(df_small['RC']==0, 
+                                                             0, df_small['RC'].apply(lambda x: max(1, math.floor(run_int*x//100))))
             df_small.astype({run + '_RC Units Available': 'Int64'}, copy=False)
             df_small=df_small[["SRC", run + '_RC Units Available', run]]
         df_small.rename(inplace=True, columns={run : run + '_1-n position'})
@@ -46,9 +61,12 @@ def load_frames(run_dict, supp_demand_path, interests_path=None):
 def summary_table(run_dict, 
                   supp_demand_path, 
                   output_path,
+                  #If none, use the run number
+                  rc_avail=None,
                   interests_path=None):
     f = load_frames(run_dict, 
                   supp_demand_path, 
+                  rc_avail,
                   interests_path)
     df_final = ft.reduce(lambda left, right: pd.merge(left, right, on='SRC'), f.values())
     df_final.to_excel(output_path)
@@ -96,15 +114,29 @@ sort_order_lower = sort_order_upper+['SRC2',
                     'RA',
                     'ARNG',
                     'USAR',
-                    'Baseline RC Availability'
+                    'Variable RC Availability'
               ]
 
 
 def sorter(sort_order, x):
     enum=enumerate(sort_order)
     positions=dict((j,i) for i,j in enum)
-    res=[positions[y]+100 if y in positions else int(y) for y in x ]
+    res=[positions[y]+100 if y in positions else y for y in x ]
     return res
+
+def compute_availability(rc_percentage):
+    #if there was any division by 0
+    if(math.isnan(rc_percentage) or rc_percentage==0 or
+       math.isinf(rc_percentage)):
+        rc_percentage=default_rc_availability
+    rc_percentage=round(rc_percentage)
+    rc_percentage=str(rc_percentage)+'%'
+    return rc_percentage
+
+def add_availability_percentage(table):
+    table[' ', 'avails']=table[' ', 'RCAvailable']/table[' ', 'RC']*100
+    table[' ', 'avails']=table[' ', 'avails'].apply(compute_availability)
+    return table
 
 def spit_cuts(run_dict, supp_demand_path, cut_levels, 
               output_path, interests_path=None):
@@ -146,16 +178,11 @@ def spit_cuts(run_dict, supp_demand_path, cut_levels,
     #     table[run, 'RC Units Available']= rint*table[' ', 'RC']//100
     #     table.astype({(run, 'RC Units Available'): 'Int64'}, copy=False)
     
-    table[' ', 'avails']=table[' ', 'RCAvailable']/table[' ', 'RC']*100
-    #if there was any division by 0
-    table[' ', 'avails']=table[' ', 'avails'].fillna(0)
-    table[' ', 'avails'] = table[' ', 'avails'].round(0)
-    table[' ', 'avails']=table[' ', 'avails'].astype(str)
-    table[' ', 'avails']=table[' ', 'avails']+'%'
+    table=add_availability_percentage(table)
     #In order to rename multiindex columns with tupes, we set the column
     #values first.
     table.columns = table.columns.values
-    table.columns = pd.MultiIndex.from_tuples(table.rename(columns={(' ', 'avails'): (variable_name, 'Baseline RC Availability'),
+    table.columns = pd.MultiIndex.from_tuples(table.rename(columns={(' ', 'avails'): (variable_name, 'Variable RC Availability'),
                                                                     (' ', 'UNTDS') : (' ', 'Unit')}))
     table.drop(columns=[(' ', 'RCAvailable'), (' ', 'RC')], inplace=True)
     table.reset_index(inplace=True, col_level=1)
